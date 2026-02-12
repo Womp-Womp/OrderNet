@@ -24,6 +24,23 @@ This repository is a Node.js monorepo:
 - npm `>=10`
 - Git
 
+### Install Prerequisites with winget (Windows)
+
+Install Node.js (LTS) and Git:
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS -e --source winget
+winget install --id Git.Git -e --source winget
+```
+
+Verify installs:
+
+```powershell
+node -v
+npm -v
+git --version
+```
+
 ## Quick Setup
 
 ### PowerShell (Windows)
