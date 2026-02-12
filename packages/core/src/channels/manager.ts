@@ -134,6 +134,10 @@ export class ChannelManager {
   inviteMember(channelId: string, memberPubKeyHex: string): boolean {
     const state = this.channels.get(channelId);
     if (!state) return false;
+    // Public channels should stay public when sharing peer identities.
+    if ((state.config.accessMode ?? 'public') === 'public' && !state.config.inviteOnly) {
+      return true;
+    }
     const normalized = memberPubKeyHex.toLowerCase();
     const allowed = new Set(state.config.allowedMembers ?? []);
     allowed.add(normalized);

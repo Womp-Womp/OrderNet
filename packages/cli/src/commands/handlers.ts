@@ -20,6 +20,8 @@ export async function handleCommand(
 ): Promise<CommandResult> {
   switch (cmd.command) {
     case 'join':
+    case 'create':
+    case 'public':
       return handleJoin(cmd, ctx);
     case 'private':
       return handlePrivate(cmd, ctx);
@@ -201,7 +203,9 @@ function handlePeers(ctx: CommandContext): CommandResult {
 function handleHelp(): CommandResult {
   return {
     output: `Commands:
-  /join #channel    - Join or create a channel
+  /join #channel    - Join or create a public channel
+  /create #channel  - Alias for /join
+  /public #channel  - Alias for /join
   /private #ch ids  - Create invite-only private group
   /invite           - Show your identity for sharing
   /invitepeer <id> [#channel] - Add a peer to channel allowlist

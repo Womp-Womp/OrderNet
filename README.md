@@ -174,6 +174,8 @@ Create/open DM:
 ## CLI Commands
 
 - `/join #channel`
+- `/create #channel` (alias of `/join`)
+- `/public #channel` (alias of `/join`)
 - `/private #group pub1,pub2`
 - `/invitepeer <pubkey> [#channel]`
 - `/invitecode [#channel]`

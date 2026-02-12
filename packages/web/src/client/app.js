@@ -176,7 +176,9 @@ function handleCommand(input) {
   const args = parts.slice(1);
 
   switch (cmd) {
-    case 'join': {
+    case 'join':
+    case 'create':
+    case 'public': {
       const name = args[0];
       if (!name) { addSystemMessage('Usage: /join #channel'); return; }
       const id = name.startsWith('#') ? name.slice(1) : name;
@@ -239,7 +241,7 @@ function handleCommand(input) {
       break;
     case 'help':
       addSystemMessage(
-        'Commands: /join #ch, /private #ch pub1,pub2, /invite <pubkey> [#ch], /invitecode [#ch], /accept <code>, /dm <pubkey>, /leave, /nick <name>, /peers, /help'
+        'Commands: /join|/create|/public #ch, /private #ch pub1,pub2, /invite <pubkey> [#ch], /invitecode [#ch], /accept <code>, /dm <pubkey>, /leave, /nick <name>, /peers, /help'
       );
       break;
     default:
