@@ -5,6 +5,7 @@ import {
   serializeEncryptedMessage,
   deserializeEncryptedMessage,
 } from '../crypto/messages.js';
+import { pubKeyToHex } from '../crypto/identity.js';
 import type { ChannelManager } from '../channels/manager.js';
 import type { MessageStore } from '../storage/messages.js';
 import type { Identity, PlainMessage, OrderNetEvent } from '../types.js';
@@ -48,6 +49,11 @@ export class ChatProtocol {
   async sendMessage(channelId: string, content: string): Promise<PlainMessage | null> {
     const channel = this.channelManager.getChannel(channelId);
     if (!channel) return null;
+    const me = pubKeyToHex(this.identity.publicKey);
+    if (!this.channelManager.hasAccess(channelId, me)) {
+      this.onEvent({ type: 'error', error: `Access denied for #${channelId}` });
+      return null;
+    }
 
     const encrypted = await encryptMessage(
       content,
@@ -85,6 +91,8 @@ export class ChatProtocol {
 
     const plain = await decryptMessage(encrypted, channel.groupKey);
     if (!plain) return;
+    const sender = pubKeyToHex(plain.senderPubKey);
+    if (!this.channelManager.hasAccess(channelId, sender)) return;
 
     this.messageStore.save(encrypted);
     this.onEvent({ type: 'message', message: plain });

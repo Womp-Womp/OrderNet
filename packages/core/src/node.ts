@@ -4,6 +4,7 @@ import { yamux } from '@chainsafe/libp2p-yamux';
 import { gossipsub } from '@chainsafe/libp2p-gossipsub';
 import { tcp } from '@libp2p/tcp';
 import { mdns } from '@libp2p/mdns';
+import { bootstrap } from '@libp2p/bootstrap';
 import { identify } from '@libp2p/identify';
 import { EventEmitter } from 'events';
 
@@ -22,6 +23,7 @@ import {
   generateIdentity,
   getFingerprint,
   pubKeyToHex,
+  hexToPubKey,
   encryptPrivateKey,
   decryptPrivateKey,
 } from './crypto/identity.js';
@@ -30,6 +32,7 @@ import type {
   OrderNetEvent,
   PlainMessage,
   EncryptedMessage,
+  ChannelConfig,
 } from './types.js';
 import { decryptMessage } from './crypto/messages.js';
 
@@ -43,6 +46,7 @@ export interface OrderNetNodeConfig {
   nickname?: string;
   passphrase?: string;
   bootstrapPeers?: string[];
+  enableMdns?: boolean;
 }
 
 export class OrderNetNode extends EventEmitter {
@@ -89,6 +93,18 @@ export class OrderNetNode extends EventEmitter {
 
     // Create libp2p node
     const port = this.config.listenPort ?? 0;
+    const peerDiscovery: any[] = [];
+
+    if (this.config.enableMdns) {
+      peerDiscovery.push(mdns());
+    }
+
+    if (this.config.bootstrapPeers && this.config.bootstrapPeers.length > 0) {
+      peerDiscovery.push(bootstrap({
+        list: this.config.bootstrapPeers,
+      }));
+    }
+
     this.libp2p = await createLibp2p({
       addresses: {
         listen: [`/ip4/0.0.0.0/tcp/${port}`],
@@ -96,7 +112,7 @@ export class OrderNetNode extends EventEmitter {
       transports: [tcp()],
       connectionEncrypters: [noise()],
       streamMuxers: [yamux()],
-      peerDiscovery: [mdns()],
+      peerDiscovery,
       services: {
         identify: identify(),
         pubsub: gossipsub({
@@ -150,6 +166,17 @@ export class OrderNetNode extends EventEmitter {
     // Start the node
     await this.libp2p.start();
 
+    // Manual bootstrap dials speed up first connection when peers are shared directly.
+    if (this.config.bootstrapPeers && this.config.bootstrapPeers.length > 0) {
+      for (const address of this.config.bootstrapPeers) {
+        try {
+          await this.libp2p.dial(address as any);
+        } catch {
+          // Ignore dial errors: discovery and retries can still connect later.
+        }
+      }
+    }
+
     // Start protocols
     this.chatProtocol.start();
     this.presenceProtocol.start();
@@ -193,15 +220,76 @@ export class OrderNetNode extends EventEmitter {
     this.chatProtocol.subscribeToChannel(state.config.id);
   }
 
+  createPrivateChannel(name: string, allowedMemberPubKeysHex: string[] = [], vouchThreshold = 1): void {
+    const state = this.channelManager.createPrivateChannel(name, allowedMemberPubKeysHex, vouchThreshold);
+    this.chatProtocol.subscribeToChannel(state.config.id);
+  }
+
+  createDmChannel(peerPubKeyHex: string): string {
+    const state = this.channelManager.createDmChannel(peerPubKeyHex);
+    this.chatProtocol.subscribeToChannel(state.config.id);
+    return state.config.id;
+  }
+
+  inviteToChannel(channelId: string, peerPubKeyHex: string): boolean {
+    return this.channelManager.inviteMember(channelId, peerPubKeyHex);
+  }
+
+  createInviteCode(channelId: string): string | null {
+    const channel = this.channelManager.getChannel(channelId);
+    if (!channel) return null;
+    const payload = {
+      version: 1,
+      id: channel.config.id,
+      name: channel.config.name,
+      creatorPubKeyHex: pubKeyToHex(channel.config.creatorPubKey),
+      vouchThreshold: channel.config.vouchThreshold,
+      accessMode: channel.config.accessMode ?? 'public',
+      inviteOnly: !!channel.config.inviteOnly,
+      allowedMembers: channel.config.allowedMembers ?? [],
+      createdAt: channel.config.createdAt,
+      groupKeyHex: Buffer.from(channel.groupKey).toString('hex'),
+    };
+    return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  }
+
+  joinWithInviteCode(code: string): string | null {
+    try {
+      const json = Buffer.from(code, 'base64url').toString('utf8');
+      const payload = JSON.parse(json);
+      if (!payload || typeof payload !== 'object') return null;
+      const groupKey = new Uint8Array(Buffer.from(payload.groupKeyHex, 'hex'));
+      const config: ChannelConfig = {
+        id: String(payload.id),
+        name: String(payload.name),
+        creatorPubKey: hexToPubKey(String(payload.creatorPubKeyHex)),
+        vouchThreshold: Number(payload.vouchThreshold || 1),
+        createdAt: Number(payload.createdAt || Date.now()),
+        accessMode: payload.accessMode === 'dm' ? 'dm' : payload.accessMode === 'private' ? 'private' : 'public',
+        inviteOnly: !!payload.inviteOnly,
+        allowedMembers: Array.isArray(payload.allowedMembers)
+          ? payload.allowedMembers.filter((v: unknown) => typeof v === 'string')
+          : [],
+      };
+      const state = this.channelManager.joinChannel(config, groupKey);
+      this.chatProtocol.subscribeToChannel(state.config.id);
+      return state.config.id;
+    } catch {
+      return null;
+    }
+  }
+
   leaveChannel(channelId: string): void {
     this.chatProtocol.unsubscribeFromChannel(channelId);
     this.channelManager.leaveChannel(channelId);
   }
 
-  getChannels(): Array<{ id: string; name: string }> {
+  getChannels(): Array<{ id: string; name: string; accessMode: 'public' | 'private' | 'dm'; inviteOnly: boolean }> {
     return this.channelManager.getAllChannels().map(ch => ({
       id: ch.config.id,
       name: ch.config.name,
+      accessMode: ch.config.accessMode ?? 'public',
+      inviteOnly: !!ch.config.inviteOnly,
     }));
   }
 

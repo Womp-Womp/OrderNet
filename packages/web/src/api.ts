@@ -96,6 +96,61 @@ export class WebSocketBridge {
         break;
       }
 
+      case 'create_private_channel': {
+        const members = Array.isArray(msg.members) ? msg.members : [];
+        this.node.createPrivateChannel(msg.channel, members, 1);
+        ws.send(JSON.stringify({
+          type: 'channel_joined',
+          channelId: msg.channel,
+          channels: this.node.getChannels(),
+        }));
+        break;
+      }
+
+      case 'create_dm_channel': {
+        const channelId = this.node.createDmChannel(msg.peer);
+        ws.send(JSON.stringify({
+          type: 'channel_joined',
+          channelId,
+          channels: this.node.getChannels(),
+        }));
+        break;
+      }
+
+      case 'invite_peer': {
+        const ok = this.node.inviteToChannel(msg.channel, msg.peer);
+        ws.send(JSON.stringify({
+          type: ok ? 'invite_sent' : 'error',
+          channelId: msg.channel,
+          peer: msg.peer,
+          channels: this.node.getChannels(),
+          error: ok ? undefined : `Failed to invite peer to #${msg.channel}`,
+        }));
+        break;
+      }
+
+      case 'get_invite_code': {
+        const inviteCode = this.node.createInviteCode(msg.channel);
+        ws.send(JSON.stringify({
+          type: inviteCode ? 'invite_code' : 'error',
+          channelId: msg.channel,
+          inviteCode,
+          error: inviteCode ? undefined : `Failed to create invite for #${msg.channel}`,
+        }));
+        break;
+      }
+
+      case 'join_with_invite': {
+        const channelId = this.node.joinWithInviteCode(msg.code);
+        ws.send(JSON.stringify({
+          type: channelId ? 'channel_joined' : 'error',
+          channelId,
+          channels: this.node.getChannels(),
+          error: channelId ? undefined : 'Invalid invite code',
+        }));
+        break;
+      }
+
       case 'leave_channel': {
         this.node.leaveChannel(msg.channel);
         ws.send(JSON.stringify({

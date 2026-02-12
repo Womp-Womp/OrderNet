@@ -8,6 +8,7 @@ export type {
   PlainMessage,
   Vouch,
   ChannelConfig,
+  ChannelAccessMode,
   ChannelState,
   PeerInfo,
   JoinRequest,

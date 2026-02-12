@@ -5,6 +5,7 @@ import { verifySignature } from '../crypto/identity.js';
 import type { ChannelManager } from '../channels/manager.js';
 import type { InviteManager } from '../trust/invite.js';
 import type { Identity, KeyExchangePayload, OrderNetEvent } from '../types.js';
+import { pubKeyToHex } from '../crypto/identity.js';
 
 const KEYEX_PROTOCOL = '/ordernet/keyex/1.0.0';
 
@@ -86,6 +87,12 @@ export class KeyExchangeProtocol {
         creatorPubKey: new Uint8Array(json.senderPubKey),
         vouchThreshold: 2,
         createdAt: json.timestamp,
+        accessMode: 'private',
+        inviteOnly: true,
+        allowedMembers: [
+          pubKeyToHex(new Uint8Array(json.senderPubKey)),
+          pubKeyToHex(this.identity.publicKey),
+        ],
       },
       groupKey
     );

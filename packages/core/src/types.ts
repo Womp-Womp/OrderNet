@@ -31,12 +31,17 @@ export interface Vouch {
   signature: Uint8Array;
 }
 
+export type ChannelAccessMode = 'public' | 'private' | 'dm';
+
 export interface ChannelConfig {
   id: string;
   name: string;
   creatorPubKey: Uint8Array;
   vouchThreshold: number;
   createdAt: number;
+  accessMode?: ChannelAccessMode;
+  inviteOnly?: boolean;
+  allowedMembers?: string[]; // hex-encoded pubkeys
 }
 
 export interface ChannelState {

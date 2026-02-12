@@ -6,6 +6,10 @@ const state = {
   messages: new Map(),
   peers: [],
   peerCount: 0,
+  ui: {
+    showPublicChannels: true,
+    showPrivateChannels: true,
+  },
 };
 
 let ws;
@@ -88,6 +92,20 @@ function handleServerMessage(data) {
       addSystemMessage(`Nickname changed to ${data.nickname}`);
       break;
 
+    case 'invite_sent':
+      addSystemMessage(`Invited ${data.peer.slice(0, 12)}.. to #${data.channelId}`);
+      state.channels = data.channels;
+      render();
+      break;
+
+    case 'invite_code':
+      addSystemMessage(`Invite code for #${data.channelId}: ${data.inviteCode}`);
+      break;
+
+    case 'error':
+      addSystemMessage(`Error: ${data.error}`);
+      break;
+
     case 'channels':
       state.channels = data.channels;
       render();
@@ -130,6 +148,16 @@ function switchChannel(channelId) {
   render();
 }
 
+function toggleChannelGroup(group) {
+  if (group === 'public') {
+    state.ui.showPublicChannels = !state.ui.showPublicChannels;
+  }
+  if (group === 'private') {
+    state.ui.showPrivateChannels = !state.ui.showPrivateChannels;
+  }
+  render();
+}
+
 function handleInput(value) {
   if (value.startsWith('/')) {
     handleCommand(value);
@@ -155,6 +183,18 @@ function handleCommand(input) {
       send({ type: 'join_channel', channel: id });
       break;
     }
+    case 'private': {
+      const name = args[0];
+      if (!name) { addSystemMessage('Usage: /private #group <pubkey1,pubkey2,...>'); return; }
+      const id = name.startsWith('#') ? name.slice(1) : name;
+      const membersArg = args[1] || '';
+      const members = membersArg
+        .split(',')
+        .map(v => v.trim().toLowerCase())
+        .filter(Boolean);
+      send({ type: 'create_private_channel', channel: id, members });
+      break;
+    }
     case 'leave': {
       const name = args[0] || state.currentChannel;
       const id = name.startsWith('#') ? name.slice(1) : name;
@@ -167,12 +207,39 @@ function handleCommand(input) {
       send({ type: 'set_nick', nickname: nick });
       break;
     }
+    case 'invite': {
+      const peer = (args[0] || '').toLowerCase();
+      const target = args[1] || state.currentChannel;
+      if (!peer) { addSystemMessage('Usage: /invite <pubkey-hex> [#channel]'); return; }
+      const channel = target.startsWith('#') ? target.slice(1) : target;
+      send({ type: 'invite_peer', channel, peer });
+      break;
+    }
+    case 'invitecode': {
+      const target = args[0] || state.currentChannel;
+      if (!target) { addSystemMessage('Usage: /invitecode [#channel]'); return; }
+      const channel = target.startsWith('#') ? target.slice(1) : target;
+      send({ type: 'get_invite_code', channel });
+      break;
+    }
+    case 'accept': {
+      const code = args[0];
+      if (!code) { addSystemMessage('Usage: /accept <invite-code>'); return; }
+      send({ type: 'join_with_invite', code });
+      break;
+    }
+    case 'dm': {
+      const peer = (args[0] || '').toLowerCase();
+      if (!peer) { addSystemMessage('Usage: /dm <peer-pubkey-hex>'); return; }
+      send({ type: 'create_dm_channel', peer });
+      break;
+    }
     case 'peers':
       send({ type: 'get_peers' });
       break;
     case 'help':
       addSystemMessage(
-        'Commands: /join #ch, /leave, /nick <name>, /peers, /help'
+        'Commands: /join #ch, /private #ch pub1,pub2, /invite <pubkey> [#ch], /invitecode [#ch], /accept <code>, /dm <pubkey>, /leave, /nick <name>, /peers, /help'
       );
       break;
     default:
@@ -195,6 +262,8 @@ function render() {
   const currentMessages = state.messages.get(state.currentChannel) || [];
   const ch = state.channels.find(c => c.id === state.currentChannel);
   const channelName = ch ? ch.name : '';
+  const publicChannels = state.channels.filter(c => !isPrivateChannel(c));
+  const privateChannels = state.channels.filter(c => isPrivateChannel(c));
 
   app.innerHTML = `
     <div class="header">
@@ -204,12 +273,32 @@ function render() {
     <div class="main">
       <div class="sidebar-left">
         <h2>Channels</h2>
-        ${state.channels.map(ch => `
-          <div class="channel-item ${ch.id === state.currentChannel ? 'active' : ''}"
-               onclick="window.__switchChannel('${ch.id}')">
-            ${ch.name}
+        <div class="channel-group">
+          <button class="group-toggle" onclick="window.__toggleChannelGroup('public')">
+            ${state.ui.showPublicChannels ? '[-]' : '[+]'} Public (${publicChannels.length})
+          </button>
+          <div class="${state.ui.showPublicChannels ? '' : 'hidden'}">
+            ${publicChannels.map(ch => `
+              <div class="channel-item ${ch.id === state.currentChannel ? 'active' : ''}"
+                   onclick="window.__switchChannel('${ch.id}')">
+                ${ch.name}
+              </div>
+            `).join('')}
           </div>
-        `).join('')}
+        </div>
+        <div class="channel-group">
+          <button class="group-toggle" onclick="window.__toggleChannelGroup('private')">
+            ${state.ui.showPrivateChannels ? '[-]' : '[+]'} Private (${privateChannels.length})
+          </button>
+          <div class="${state.ui.showPrivateChannels ? '' : 'hidden'}">
+            ${privateChannels.map(ch => `
+              <div class="channel-item ${ch.id === state.currentChannel ? 'active' : ''}"
+                   onclick="window.__switchChannel('${ch.id}')">
+                ${ch.name}
+              </div>
+            `).join('')}
+          </div>
+        </div>
         <div class="join-input">
           <input type="text" id="join-input" placeholder="#channel" />
           <button onclick="window.__joinChannel()">+</button>
@@ -255,6 +344,7 @@ function render() {
 }
 
 window.__switchChannel = switchChannel;
+window.__toggleChannelGroup = toggleChannelGroup;
 window.__sendMessage = () => {
   const input = document.getElementById('msg-input');
   if (input.value.trim()) {
@@ -273,3 +363,11 @@ window.__joinChannel = () => {
 };
 
 connect();
+
+function isPrivateChannel(channel) {
+  if (channel.accessMode === 'private' || channel.accessMode === 'dm' || channel.inviteOnly) {
+    return true;
+  }
+  const value = `${channel.id} ${channel.name}`.toLowerCase();
+  return value.startsWith('private-') || value.startsWith('priv-');
+}

@@ -14,6 +14,8 @@ async function main() {
   const portIdx = args.indexOf('--port');
   const httpPortIdx = args.indexOf('--http-port');
   const dbIdx = args.indexOf('--db');
+  const bootstrapPeers = collectRepeatedArg(args, '--bootstrap');
+  const enableMdns = args.includes('--mdns');
 
   const nickname = nickIdx >= 0 ? args[nickIdx + 1] : undefined;
   const p2pPort = portIdx >= 0 ? parseInt(args[portIdx + 1], 10) : undefined;
@@ -25,6 +27,8 @@ async function main() {
     nickname,
     listenPort: p2pPort,
     dbPath,
+    bootstrapPeers,
+    enableMdns,
   });
 
   console.log('Starting OrderNet node...');
@@ -75,3 +79,14 @@ main().catch(err => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
+
+function collectRepeatedArg(args: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flag && i + 1 < args.length) {
+      values.push(args[i + 1]);
+      i++;
+    }
+  }
+  return values;
+}

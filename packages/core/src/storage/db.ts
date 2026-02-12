@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS channels (
   group_key BLOB NOT NULL,
   creator_public_key BLOB NOT NULL,
   vouch_threshold INTEGER DEFAULT 2,
+  access_mode TEXT DEFAULT 'public',
+  invite_only INTEGER DEFAULT 0,
+  allowed_members TEXT,
   joined_at INTEGER NOT NULL
 );
 
@@ -78,5 +81,19 @@ export function openDatabase(dbPath?: string): Database.Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+function migrate(db: Database.Database): void {
+  // Backward-compatible migrations for older local databases.
+  try {
+    db.exec("ALTER TABLE channels ADD COLUMN access_mode TEXT DEFAULT 'public'");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE channels ADD COLUMN invite_only INTEGER DEFAULT 0");
+  } catch {}
+  try {
+    db.exec("ALTER TABLE channels ADD COLUMN allowed_members TEXT");
+  } catch {}
 }
