@@ -1,0 +1,20 @@
+{
+  "name": "@ordernet/web",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/server.ts --format esm --clean",
+    "dev": "tsup src/server.ts --format esm --watch",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@ordernet/core": "*",
+    "fastify": "^5.7.0",
+    "@fastify/websocket": "^11.2.0",
+    "@fastify/static": "^9.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}

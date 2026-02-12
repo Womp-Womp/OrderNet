@@ -1,0 +1,24 @@
+{
+  "name": "@ordernet/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ordernet": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@ordernet/core": "*",
+    "ink": "^6.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}
